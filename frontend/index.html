@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChronoWeave — Neurosymbolic Omnichannel Supply Chain Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-dark:    #060913;
+      --bg-card:    #0d1424;
+      --bg-surface: #131c31;
+      --bg-hover:   #1a2642;
+      --border:     rgba(100, 180, 255, 0.12);
+      --border-lit: rgba(14, 165, 233, 0.4);
+      --primary:    #0ea5e9;
+      --accent:     #38bdf8;
+      --purple:     #a855f7;
+      --pink:       #ec4899;
+      --green:      #10b981;
+      --yellow:     #f59e0b;
+      --orange:     #f97316;
+      --red:        #ef4444;
+      --text:       rgba(255, 255, 255, 0.94);
+      --muted:      rgba(255, 255, 255, 0.48);
+      --dim:        rgba(255, 255, 255, 0.25);
+    }
+
+    html { font-size: 13.5px; }
+    body {
+      background: var(--bg-dark);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Ambient glow */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse 70% 50% at 15% 15%, rgba(14, 165, 233, 0.05) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 60% at 85% 85%, rgba(168, 85, 247, 0.04) 0%, transparent 60%);
+      pointer-events: none; z-index: 0;
+    }
+
+    .app-shell {
+      position: relative; z-index: 1;
+      display: grid;
+      grid-template-columns: 290px 1fr 340px;
+      grid-template-rows: 58px 1fr;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Topbar */
+    .topbar {
+      grid-column: 1 / -1;
+      background: rgba(6, 9, 19, 0.96);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-logo {
+      font-size: 1.45rem; font-weight: 900; letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .brand-badge {
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+      padding: 3px 8px; border-radius: 6px;
+      background: rgba(14, 165, 233, 0.12); color: var(--accent); border: 1px solid rgba(14, 165, 233, 0.25);
+    }
+    .topbar-controls { display: flex; align-items: center; gap: 10px; }
+    .clock-pill {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-weight: 700;
+      padding: 5px 12px; border-radius: 20px;
+      background: var(--bg-surface); border: 1px solid var(--border);
+      color: var(--accent);
+    }
+    .season-pill {
+      font-size: 0.75rem; font-weight: 600; padding: 5px 10px; border-radius: 20px;
+      background: rgba(245, 158, 11, 0.12); color: var(--yellow); border: 1px solid rgba(245, 158, 11, 0.25);
+    }
+    .btn {
+      padding: 7px 14px; border-radius: 8px; font-family: 'Outfit', sans-serif;
+      font-weight: 700; font-size: 0.82rem; cursor: pointer; border: none;
+      transition: all 0.18s; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-primary { background: linear-gradient(135deg, var(--primary), var(--accent)); color: #040811; }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-secondary { background: var(--bg-surface); border: 1px solid var(--border); color: var(--text); }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-danger { background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--red); }
+    .btn-danger:hover { background: rgba(239, 68, 68, 0.2); }
+
+    /* Left Sidebar: Node Cockpit */
+    .left-sidebar {
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto; padding: 16px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .section-label {
+      font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;
+      color: var(--muted); margin-bottom: 4px;
+    }
+    .node-card {
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px; cursor: pointer;
+      transition: all 0.2s; position: relative;
+    }
+    .node-card:hover, .node-card.active {
+      border-color: var(--accent); background: var(--bg-hover);
+      box-shadow: 0 4px 16px rgba(14, 165, 233, 0.08);
+    }
+    .node-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .node-name { font-weight: 700; font-size: 0.88rem; color: var(--text); }
+    .node-subtitle { font-size: 0.7rem; color: var(--muted); margin-top: 1px; }
+    .node-metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .m-item { }
+    .m-label { font-size: 0.62rem; color: var(--dim); text-transform: uppercase; }
+    .m-val { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; font-weight: 700; margin-top: 1px; }
+    .mode-tag {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 700;
+      padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 6px;
+    }
+    .mode-EQUILIBRIUM      { background: rgba(16, 185, 129, 0.15); color: var(--green); }
+    .mode-CAUTIOUS_ADAPT   { background: rgba(245, 158, 11, 0.15); color: var(--yellow); }
+    .mode-ACTIVE_REBALANCE { background: rgba(249, 115, 22, 0.15); color: var(--orange); }
+    .mode-CRISIS_RESPONSE  { background: rgba(239, 68, 68, 0.2); color: var(--red); }
+    .mode-SYSTEMIC_LOCK    { background: rgba(239, 68, 68, 0.25); color: var(--red); border: 1px solid var(--red); }
+
+    /* Center Main */
+    .main-viewport {
+      overflow-y: auto; padding: 18px 22px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 18px;
+    }
+    .card-header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+    }
+    .card-title { font-size: 0.88rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .stat-banner {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    }
+    .banner-stat {
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 12px;
+    }
+    .banner-label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; }
+    .banner-val { font-family: 'JetBrains Mono', monospace; font-size: 1.15rem; font-weight: 700; margin-top: 2px; }
+
+    /* Chart row */
+    .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .chart-container { position: relative; height: 190px; width: 100%; }
+
+    /* Size Curve Heatmap */
+    .size-curve-row { display: flex; gap: 10px; margin-top: 8px; }
+    .size-box {
+      flex: 1; background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px; text-align: center;
+    }
+    .size-tag { font-weight: 700; font-size: 0.85rem; }
+    .size-pct { font-family: 'JetBrains Mono', monospace; font-size: 0.95rem; font-weight: 700; margin-top: 4px; }
+    .size-status { font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+
+    /* Symbolic trace log */
+    .trace-list { display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow-y: auto; }
+    .trace-item {
+      background: var(--bg-surface); border-left: 3px solid var(--accent);
+      border-radius: 0 6px 6px 0; padding: 8px 12px; font-size: 0.78rem;
+    }
+    .trace-rule { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--yellow); font-weight: 700; }
+    .trace-desc { color: var(--text); margin-top: 2px; line-height: 1.4; }
+
+    /* Counterfactual Slider */
+    .what-if-box {
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.05), rgba(168, 85, 247, 0.05));
+      border: 1px dashed var(--border-lit); border-radius: 10px; padding: 14px 16px;
+    }
+    .what-if-controls { display: flex; align-items: center; gap: 16px; margin-top: 10px; }
+    .slider-wrap { flex: 1; }
+    .slider { width: 100%; cursor: pointer; accent-color: var(--accent); }
+    .what-if-results {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px;
+      background: var(--bg-surface); border-radius: 8px; padding: 10px 14px;
+    }
+
+    /* Right Sidebar: Tabs (Alerts / Chat / InfoBus / Physics) */
+    .right-sidebar {
+      background: var(--bg-card);
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .tab-bar {
+      display: flex; border-bottom: 1px solid var(--border); background: var(--bg-surface);
+    }
+    .tab-btn {
+      flex: 1; padding: 12px 4px; font-size: 0.72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.5px; text-align: center;
+      background: transparent; border: none; color: var(--muted); cursor: pointer;
+      border-bottom: 2px solid transparent; transition: all 0.18s;
+    }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--bg-card); }
+    .tab-btn:hover { color: var(--text); }
+    .tab-pane { flex: 1; overflow-y: auto; padding: 14px; display: none; flex-direction: column; gap: 10px; }
+    .tab-pane.active { display: flex; }
+
+    /* Alerts */
+    .alert-card {
+      background: var(--bg-surface); border-radius: 8px; padding: 10px 12px;
+      border-left: 3px solid var(--border); position: relative;
+    }
+    .alert-card.CRITICAL { border-left-color: var(--red); }
+    .alert-card.HIGH     { border-left-color: var(--orange); }
+    .alert-card.MEDIUM   { border-left-color: var(--yellow); }
+    .alert-card.LOW      { border-left-color: var(--green); }
+    .alert-meta { display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--muted); }
+    .alert-title { font-weight: 700; font-size: 0.8rem; margin: 3px 0; color: var(--text); }
+    .alert-desc { font-size: 0.72rem; color: var(--muted); line-height: 1.35; }
+    .alert-action { font-size: 0.72rem; color: var(--accent); margin-top: 4px; font-weight: 500; }
+
+    /* Chat */
+    .chat-role-picker {
+      display: flex; gap: 6px; margin-bottom: 8px;
+    }
+    .role-btn {
+      flex: 1; padding: 5px; font-size: 0.65rem; font-weight: 700; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg-surface); color: var(--muted);
+      cursor: pointer; text-align: center; text-transform: uppercase;
+    }
+    .role-btn.active { background: var(--primary); color: #040811; border-color: var(--primary); }
+    .chat-box {
+      flex: 1; min-height: 240px; max-height: 380px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 8px; padding: 4px;
+    }
+    .chat-bubble {
+      padding: 8px 12px; border-radius: 8px; font-size: 0.75rem; line-height: 1.45; max-width: 90%;
+    }
+    .chat-bubble.user { align-self: flex-end; background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.3); }
+    .chat-bubble.bot { align-self: flex-start; background: var(--bg-surface); border: 1px solid var(--border); }
+    .chat-role-label { font-size: 0.6rem; font-weight: 700; color: var(--accent); text-transform: uppercase; margin-bottom: 2px; }
+    .chat-input-bar { display: flex; gap: 6px; margin-top: auto; }
+    .chat-input {
+      flex: 1; background: var(--bg-surface); border: 1px solid var(--border);
+      color: var(--text); padding: 8px 10px; border-radius: 8px; font-size: 0.78rem;
+      font-family: inherit; outline: none;
+    }
+    .chat-input:focus { border-color: var(--accent); }
+    .chat-send {
+      padding: 0 14px; background: var(--primary); border: none; border-radius: 8px;
+      color: #040811; font-weight: 700; cursor: pointer;
+    }
+
+    /* Cascade risks */
+    .risk-card {
+      background: var(--bg-surface); border-radius: 8px; padding: 10px; border: 1px solid var(--border);
+    }
+    .risk-header { font-weight: 700; font-size: 0.78rem; color: var(--yellow); }
+
+    /* Helper styles */
+    .c-green { color: var(--green); }
+    .c-yellow { color: var(--yellow); }
+    .c-red { color: var(--red); }
+    .c-accent { color: var(--accent); }
+    .c-purple { color: var(--purple); }
+    .c-muted { color: var(--muted); }
+    .empty-state { text-align: center; color: var(--muted); padding: 30px 10px; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo">ChronoWeave</span>
+      <span class="brand-badge">Omnichannel Apparel · 20 Stores + D2C</span>
+      <span style="font-size:0.75rem; color:var(--muted);">Physics-Informed Neurosymbolic Engine</span>
+    </div>
+
+    <div class="topbar-controls">
+      <div class="clock-pill" id="clockBadge">Week 0 / 104</div>
+      <div class="season-pill" id="seasonBadge">Season 1 · 26w to EOSS</div>
+      <button class="btn btn-primary" id="btnStep" onclick="stepWeek()">▶ Step Week</button>
+      <button class="btn btn-secondary" id="btnRun10" onclick="runBulk(10)">Run 10w</button>
+      <button class="btn btn-secondary" id="btnRunSeason" onclick="runBulk(26)">Run Season</button>
+      <button class="btn btn-danger" id="btnReset" onclick="resetSim()">↺ Reset</button>
+    </div>
+  </header>
+
+  <!-- Left Sidebar: Node Cockpit -->
+  <aside class="left-sidebar">
+    <div class="section-label">Omnichannel Node Stack</div>
+
+    <!-- Node 1: Stores -->
+    <div class="node-card active" id="card-store" onclick="selectNode('store')">
+      <div class="node-header">
+        <div>
+          <div class="node-name">Node 1: Retail Stores & D2C</div>
+          <div class="node-subtitle">20 Flagship Stores + Online Marketplace</div>
+        </div>
+        <span class="mode-tag mode-EQUILIBRIUM" id="tag-store">EQUILIBRIUM</span>
+      </div>
+      <div class="node-metric-grid">
+        <div class="m-item"><div class="m-label">POS Velocity</div><div class="m-val c-accent" id="m-store-pos">—</div></div>
+        <div class="m-item"><div class="m-label">Rack Health</div><div class="m-val c-green" id="m-store-rack">—</div></div>
+        <div class="m-item"><div class="m-label">M/L Core Sizing</div><div class="m-val" id="m-store-ml">—</div></div>
+        <div class="m-item"><div class="m-label">Promo Status</div><div class="m-val" id="m-store-promo">—</div></div>
+      </div>
+    </div>
+
+    <!-- Node 2: Central Warehouse -->
+    <div class="node-card" id="card-central_warehouse" onclick="selectNode('central_warehouse')">
+      <div class="node-header">
+        <div>
+          <div class="node-name">Node 2: Central Warehouse</div>
+          <div class="node-subtitle">Bhiwandi / Bengaluru Hub</div>
+        </div>
+        <span class="mode-tag mode-EQUILIBRIUM" id="tag-central_warehouse">EQUILIBRIUM</span>
+      </div>
+      <div class="node-metric-grid">
+        <div class="m-item"><div class="m-label">Effective Inv</div><div class="m-val c-accent" id="m-cw-inv">—</div></div>
+        <div class="m-item"><div class="m-label">Return Boomerang</div><div class="m-val c-yellow" id="m-cw-ret">—</div></div>
+        <div class="m-item"><div class="m-label">Store Fill Rate</div><div class="m-val c-green" id="m-cw-fill">—</div></div>
+        <div class="m-item"><div class="m-label">Factory Order</div><div class="m-val" id="m-cw-order">—</div></div>
+      </div>
+    </div>
+
+    <!-- Node 3: Fabric Mill -->
+    <div class="node-card" id="card-mill" onclick="selectNode('mill')">
+      <div class="node-header">
+        <div>
+          <div class="node-name">Node 3: Cut-Make-Trim & Mill</div>
+          <div class="node-subtitle">Tirupur / Surat Weaving Facility</div>
+        </div>
+        <span class="mode-tag mode-EQUILIBRIUM" id="tag-mill">EQUILIBRIUM</span>
+      </div>
+      <div class="node-metric-grid">
+        <div class="m-item"><div class="m-label">Greige Batches</div><div class="m-val c-purple" id="m-mill-greige">—</div></div>
+        <div class="m-item"><div class="m-label">Lead Time SLA</div><div class="m-val" id="m-mill-lt">—</div></div>
+        <div class="m-item"><div class="m-label">EOSS Proximity</div><div class="m-val c-yellow" id="m-mill-eoss">—</div></div>
+        <div class="m-item"><div class="m-label">Dye Capacity</div><div class="m-val c-green" id="m-mill-dye">—</div></div>
+      </div>
+    </div>
+
+    <!-- Node 4: Procurement & Costing -->
+    <div class="node-card" id="card-procurement" onclick="selectNode('procurement')">
+      <div class="node-header">
+        <div>
+          <div class="node-name">Node 4: Procurement & Costing</div>
+          <div class="node-subtitle">Raw Cotton, Yarn & Tax Guard</div>
+        </div>
+        <span class="mode-tag mode-EQUILIBRIUM" id="tag-procurement">EQUILIBRIUM</span>
+      </div>
+      <div class="node-metric-grid">
+        <div class="m-item"><div class="m-label">Cotton Index</div><div class="m-val" id="m-proc-cotton">—</div></div>
+        <div class="m-item"><div class="m-label">Cost Pressure</div><div class="m-val" id="m-proc-cost">—</div></div>
+        <div class="m-item"><div class="m-label">₹999 GST Cliff</div><div class="m-val c-green" id="m-proc-gst">—</div></div>
+        <div class="m-item"><div class="m-label">Hedged Yarn %</div><div class="m-val c-accent" id="m-proc-hedge">—</div></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Center Main Viewport -->
+  <main class="main-viewport">
+
+    <!-- Stat banner -->
+    <div class="stat-banner">
+      <div class="banner-stat">
+        <div class="banner-label">End Consumer Velocity</div>
+        <div class="banner-val c-accent" id="top-demand">— <span style="font-size:0.7rem;color:var(--muted);">units/wk</span></div>
+      </div>
+      <div class="banner-stat">
+        <div class="banner-label">Organic Latent Baseline</div>
+        <div class="banner-val c-green" id="top-organic">— <span style="font-size:0.7rem;color:var(--muted);">Kalman µ</span></div>
+      </div>
+      <div class="banner-stat">
+        <div class="banner-label">ChronoWeave Bullwhip</div>
+        <div class="banner-val c-accent" id="top-bullwhip-neuro">—</div>
+      </div>
+      <div class="banner-stat">
+        <div class="banner-label">Legacy ERP Bullwhip</div>
+        <div class="banner-val c-red" id="top-bullwhip-erp">—</div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="chart-grid">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📈 A/B Bullwhip Distortion (Legacy ERP vs ChronoWeave)</div>
+          <span style="font-size:0.7rem; color:var(--muted);">Order Variance at Central Warehouse</span>
+        </div>
+        <div class="chart-container"><canvas id="chartOrders"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">⚡ Phantom Demand Decomposition (Kalman Filter)</div>
+          <span style="font-size:0.7rem; color:var(--muted);">Organic vs Promo vs Return Wave</span>
+        </div>
+        <div class="chart-container"><canvas id="chartDecomp"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Size Curve Breakdown -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">👗 Omnichannel Size-Curve Completeness Ratio (C_jt)</div>
+        <span style="font-size:0.72rem; color:var(--muted);">Censored Demand Adjustment applied if Core M/L sizes drop below 50%</span>
+      </div>
+      <div class="size-curve-row" id="sizeCurveRow">
+        <div class="size-box"><div class="size-tag">XS</div><div class="size-pct c-accent">6%</div><div class="size-status">Stable</div></div>
+        <div class="size-box"><div class="size-tag">S</div><div class="size-pct c-accent">14%</div><div class="size-status">Stable</div></div>
+        <div class="size-box" style="border-color:var(--accent);"><div class="size-tag">M (Core)</div><div class="size-pct c-green" id="size-M">22%</div><div class="size-status" id="stat-M">Optimal</div></div>
+        <div class="size-box" style="border-color:var(--accent);"><div class="size-tag">L (Core)</div><div class="size-pct c-green" id="size-L">28%</div><div class="size-status" id="stat-L">Optimal</div></div>
+        <div class="size-box"><div class="size-tag">XL</div><div class="size-pct c-accent">18%</div><div class="size-status">Stable</div></div>
+        <div class="size-box"><div class="size-tag">XXL</div><div class="size-pct c-accent">12%</div><div class="size-status">Stable</div></div>
+      </div>
+    </div>
+
+    <!-- Symbolic Guardrail Trace Log -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🛡️ Symbolic Guardrail Shield & Causal Trace</div>
+        <span style="font-size:0.72rem; color:var(--muted);">Deterministic Physics Constraints Overriding Naive Replenishment</span>
+      </div>
+      <div class="trace-list" id="traceList">
+        <div class="empty-state">No guardrail interventions yet — run simulation to see active constraints.</div>
+      </div>
+    </div>
+
+    <!-- What-If Lookahead -->
+    <div class="card what-if-box">
+      <div class="card-header">
+        <div class="card-title">🔮 Counterfactual "What-If" Lookahead Slider</div>
+        <span style="font-size:0.72rem; color:var(--accent);">Simulate 14-day forward impact of manual order override</span>
+      </div>
+      <div class="what-if-controls">
+        <span style="font-size:0.78rem; font-weight:700;">Manual Order Offset:</span>
+        <div class="slider-wrap">
+          <input type="range" min="-1500" max="1500" step="100" value="0" class="slider" id="whatIfSlider" oninput="updateWhatIf(this.value)">
+        </div>
+        <span style="font-family:'JetBrains Mono'; font-weight:700; font-size:0.9rem;" id="whatIfVal">0 units</span>
+      </div>
+      <div class="what-if-results" id="whatIfResults">
+        <div><div style="font-size:0.65rem;color:var(--muted)">WORKING CAPITAL IMPACT</div><div class="m-val" id="wi-wc">₹0</div></div>
+        <div><div style="font-size:0.65rem;color:var(--muted)">2W HOLDING COST</div><div class="m-val" id="wi-hc">₹0</div></div>
+        <div><div style="font-size:0.65rem;color:var(--muted)">STOCKOUT RISK</div><div class="m-val c-green" id="wi-so">2%</div></div>
+      </div>
+      <div style="font-size:0.72rem; color:var(--muted); margin-top:8px;" id="wi-verdict">Move slider to evaluate simulated lookahead.</div>
+    </div>
+
+  </main>
+
+  <!-- Right Sidebar: Interactive Hub -->
+  <aside class="right-sidebar">
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('alerts')">🔔 Alerts (<span id="alertCountBadge">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('chat')">💬 Node Chat</button>
+      <button class="tab-btn" onclick="switchTab('bus')">🌐 Bus</button>
+      <button class="tab-btn" onclick="switchTab('physics')">⚛️ Physics</button>
+    </div>
+
+    <!-- Alerts Tab -->
+    <div class="tab-pane active" id="pane-alerts">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <span class="section-label">Active Operational Alerts</span>
+        <span style="font-size:0.68rem; color:var(--muted);" id="alertSummaryText">All nodes normal</span>
+      </div>
+      <div id="alertsContainer">
+        <div class="empty-state">No alerts triggered yet.</div>
+      </div>
+    </div>
+
+    <!-- Node Chat Tab -->
+    <div class="tab-pane" id="pane-chat">
+      <div class="chat-role-picker">
+        <button class="role-btn active" id="rbtn-store" onclick="setChatRole('store')">Store</button>
+        <button class="role-btn" id="rbtn-central_warehouse" onclick="setChatRole('central_warehouse')">Warehouse</button>
+        <button class="role-btn" id="rbtn-mill" onclick="setChatRole('mill')">Mill</button>
+        <button class="role-btn" id="rbtn-procurement" onclick="setChatRole('procurement')">Procure</button>
+      </div>
+      <div class="chat-box" id="chatBox">
+        <div class="chat-bubble bot">
+          <div class="chat-role-label" id="chatBotLabel">Store Operations Manager</div>
+          I am grounded in live simulation state for your role. Ask me anything: "Should I reorder M/L sizes?", "Is this demand spike real or promo?", "How does the freight delay affect me?"
+        </div>
+      </div>
+      <div class="chat-input-bar">
+        <input type="text" class="chat-input" id="chatInput" placeholder="Ask node copilot..." onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="chat-send" onclick="sendChat()">→</button>
+      </div>
+    </div>
+
+    <!-- Information Bus Tab -->
+    <div class="tab-pane" id="pane-bus">
+      <span class="section-label">Information Bus Cross-Node Signals</span>
+      <div style="font-size:0.72rem; color:var(--muted); line-height:1.4;">
+        Replaces siloed ERP visibility with full-chain transparency. Each node broadcasts its state every tick.
+      </div>
+      <div id="busSignalsList" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+        <div class="empty-state">Run simulation to view broadcast bus packets.</div>
+      </div>
+    </div>
+
+    <!-- Physics Tab -->
+    <div class="tab-pane" id="pane-physics">
+      <span class="section-label">Wardenclyffe Physics Telemetry</span>
+      <div style="font-size:0.72rem; color:var(--muted); margin-bottom:8px;">
+        Emergent time & dynamic learning rate derived from operational stress energy.
+      </div>
+      <div id="physicsDetails">
+        <div class="empty-state">Physics engines initialize after Step 1.</div>
+      </div>
+    </div>
+
+  </aside>
+
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let currentWeek = 0;
+let activeNode = 'store';
+let chatRole = 'store';
+let simHistory = [];
+
+// ── Chart Setup ──────────────────────────────────────────────────────────────
+const ctxOrders = document.getElementById('chartOrders').getContext('2d');
+const chartOrders = new Chart(ctxOrders, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label: 'Customer Net Demand', data: [], borderColor: '#38bdf8', borderWidth: 2, tension: 0.35, pointRadius: 2 },
+      { label: 'ChronoWeave Orders (CW)', data: [], borderColor: '#10b981', borderWidth: 2, tension: 0.35, pointRadius: 2 },
+      { label: 'Legacy ERP Orders (CW)', data: [], borderColor: '#ef4444', borderWidth: 1.5, borderDash: [4, 3], tension: 0.35, pointRadius: 1 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: 'rgba(255,255,255,0.6)', font: { size: 10 } } } },
+    scales: {
+      x: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+      y: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+    }
+  }
+});
+
+const ctxDecomp = document.getElementById('chartDecomp').getContext('2d');
+const chartDecomp = new Chart(ctxDecomp, {
+  type: 'bar',
+  data: {
+    labels: [],
+    datasets: [
+      { label: 'Organic Baseline', data: [], backgroundColor: 'rgba(16, 185, 129, 0.7)' },
+      { label: 'Promo Spike Lift', data: [], backgroundColor: 'rgba(245, 158, 11, 0.7)' },
+      { label: 'Return Offset (Deducted)', data: [], backgroundColor: 'rgba(239, 68, 68, 0.6)' }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { stacked: true, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+      y: { stacked: true, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+    },
+    plugins: { legend: { labels: { color: 'rgba(255,255,255,0.6)', font: { size: 10 } } } }
+  }
+});
+
+// ── Step & Run ────────────────────────────────────────────────────────────────
+async function stepWeek() {
+  document.getElementById('btnStep').disabled = true;
+  try {
+    const res = await fetch('/api/step', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) renderPayload(data.data);
+    else alert('Error: ' + data.error);
+  } catch(e) { console.error(e); }
+  document.getElementById('btnStep').disabled = false;
+}
+
+async function runBulk(weeks) {
+  document.getElementById('btnStep').disabled = true;
+  try {
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weeks })
+    });
+    const data = await res.json();
+    if (data.ok && data.data.length) {
+      data.data.forEach(p => renderPayload(p));
+    }
+  } catch(e) { console.error(e); }
+  document.getElementById('btnStep').disabled = false;
+}
+
+async function resetSim() {
+  await fetch('/api/reset', { method: 'POST' });
+  location.reload();
+}
+
+// ── Render Payload ────────────────────────────────────────────────────────────
+function renderPayload(p) {
+  currentWeek = p.week;
+  simHistory.push(p);
+  if (simHistory.length > 24) simHistory.shift();
+
+  // Badges
+  document.getElementById('clockBadge').textContent = `Week ${p.week} / 104`;
+  const sRem = p.season_weeks_remaining;
+  const sNum = Math.ceil(p.week / 26);
+  document.getElementById('seasonBadge').textContent = `Season ${sNum} · ${sRem}w to EOSS`;
+
+  // Top banners
+  document.getElementById('top-demand').innerHTML = `${Math.round(p.customer_demand)} <span style="font-size:0.7rem;color:var(--muted);">units/wk</span>`;
+  document.getElementById('top-organic').innerHTML = `${Math.round(p.organic_demand)} <span style="font-size:0.7rem;color:var(--muted);">Kalman µ</span>`;
+  document.getElementById('top-bullwhip-neuro').innerHTML = `${p.bullwhip.neuro_ratio.toFixed(2)}× <span style="font-size:0.68rem;color:var(--green);">(Variance Absorbed)</span>`;
+  document.getElementById('top-bullwhip-erp').innerHTML = `${p.bullwhip.erp_ratio.toFixed(2)}× <span style="font-size:0.68rem;color:var(--red);">(Amplified)</span>`;
+
+  // Node Cards
+  const st = p.node_states.store;
+  document.getElementById('m-store-pos').textContent = `${st.pos_velocity} u/d`;
+  document.getElementById('m-store-rack').textContent = `${Math.round(st.rack_completeness * 100)}%`;
+  document.getElementById('m-store-ml').textContent = `${Math.round(st.ml_size_completeness * 100)}%`;
+  document.getElementById('m-store-promo').textContent = st.promo_flag ? '🔥 ACTIVE (3.5×)' : 'Organic';
+  document.getElementById('m-store-promo').className = 'm-val ' + (st.promo_flag ? 'c-yellow' : 'c-green');
+
+  const cw = p.node_states.central_warehouse;
+  document.getElementById('m-cw-inv').textContent = `${Math.round(cw.effective_inventory)} u`;
+  document.getElementById('m-cw-ret').textContent = `${Math.round(cw.predicted_returns_week)} u (7-14d)`;
+  document.getElementById('m-cw-fill').textContent = `${Math.round(cw.fill_rate * 100)}%`;
+  document.getElementById('m-cw-order').textContent = `${p.final_orders.central_warehouse} u`;
+
+  const ml = p.node_states.mill;
+  document.getElementById('m-mill-greige').textContent = `${p.greige_stock_batches} btc`;
+  document.getElementById('m-mill-lt').textContent = `${Math.round(ml.lead_time_estimate_days)} days`;
+  document.getElementById('m-mill-eoss').textContent = sRem <= 8 ? '🚨 SUICIDE WINDOW' : `${sRem}w safe`;
+  document.getElementById('m-mill-eoss').className = 'm-val ' + (sRem <= 8 ? 'c-red' : 'c-green');
+  document.getElementById('m-mill-dye').textContent = ml.dye_batch_status;
+
+  const pr = p.node_states.procurement;
+  document.getElementById('m-proc-cotton').textContent = `₹${Math.round(pr.cotton_index)}/kg`;
+  document.getElementById('m-proc-cost').textContent = `${pr.cost_pressure_index}×`;
+  document.getElementById('m-proc-gst').textContent = pr.gst_cliff_status ? '⚠️ TABOO ZONE' : '✓ ₹999 Locked';
+  document.getElementById('m-proc-gst').className = 'm-val ' + (pr.gst_cliff_status ? 'c-red' : 'c-green');
+  document.getElementById('m-proc-hedge').textContent = `${Math.round(pr.yarn_hedge_pct * 100)}%`;
+
+  // Physics tags
+  ['store', 'central_warehouse', 'mill', 'procurement'].forEach(nid => {
+    const phys = p.physics[nid];
+    const el = document.getElementById(`tag-${nid}`);
+    if (phys && el) {
+      el.textContent = phys.inference_mode;
+      el.className = `mode-tag mode-${phys.inference_mode}`;
+    }
+  });
+
+  // Size curves
+  document.getElementById('size-M').textContent = `${Math.round(st.size_curve_M * 100)}%`;
+  document.getElementById('size-L').textContent = `${Math.round(st.size_curve_L * 100)}%`;
+  document.getElementById('stat-M').textContent = st.size_curve_M < 0.1 ? '⚠️ Stockout' : 'Optimal';
+  document.getElementById('stat-L').textContent = st.size_curve_L < 0.1 ? '⚠️ Stockout' : 'Optimal';
+
+  // Charts
+  updateCharts(p);
+
+  // Guardrail traces
+  renderTraces(p.guardrail_log);
+
+  // Alerts
+  renderAlerts(p.alerts);
+
+  // Bus Signals
+  renderBus(p.cross_node_visibility);
+
+  // Physics pane
+  renderPhysics(p.physics);
+}
+
+function updateCharts(p) {
+  const lbl = `W${p.week}`;
+  chartOrders.data.labels.push(lbl);
+  chartOrders.data.datasets[0].data.push(p.customer_demand);
+  chartOrders.data.datasets[1].data.push(p.final_orders.central_warehouse);
+  chartOrders.data.datasets[2].data.push(p.erp_orders.central_warehouse);
+  if (chartOrders.data.labels.length > 24) {
+    chartOrders.data.labels.shift();
+    chartOrders.data.datasets.forEach(d => d.data.shift());
+  }
+  chartOrders.update();
+
+  chartDecomp.data.labels.push(lbl);
+  chartDecomp.data.datasets[0].data.push(p.kalman.organic);
+  chartDecomp.data.datasets[1].data.push(p.kalman.promo_lift);
+  chartDecomp.data.datasets[2].data.push(-p.return_wave.expected_returns_week);
+  if (chartDecomp.data.labels.length > 24) {
+    chartDecomp.data.labels.shift();
+    chartDecomp.data.datasets.forEach(d => d.data.shift());
+  }
+  chartDecomp.update();
+}
+
+function renderTraces(traces) {
+  const el = document.getElementById('traceList');
+  if (!traces || !traces.length) {
+    el.innerHTML = '<div class="empty-state">No guardrails triggered this week. Supply chain operating within physical bounds.</div>';
+    return;
+  }
+  el.innerHTML = traces.map(t => `
+    <div class="trace-item">
+      <div class="trace-rule">${t.rule} [${t.node.toUpperCase()}]</div>
+      <div class="trace-desc">${t.trace}</div>
+      ${t.savings ? `<div style="font-size:0.7rem;color:var(--green);margin-top:2px;">💰 ${t.savings}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function renderAlerts(alerts) {
+  const el = document.getElementById('alertsContainer');
+  document.getElementById('alertCountBadge').textContent = alerts.length;
+  if (!alerts.length) {
+    el.innerHTML = '<div class="empty-state">No operational alerts active. All metrics normal.</div>';
+    return;
+  }
+  el.innerHTML = alerts.map(a => `
+    <div class="alert-card ${a.severity}">
+      <div class="alert-meta">
+        <span>${a.node.toUpperCase()} · ${a.category}</span>
+        <span style="font-weight:700;">W${a.week}</span>
+      </div>
+      <div class="alert-title">${a.title}</div>
+      <div class="alert-desc">${a.detail}</div>
+      <div class="alert-action">👉 ${a.action}</div>
+    </div>
+  `).join('');
+}
+
+function renderBus(digest) {
+  const el = document.getElementById('busSignalsList');
+  if (!digest || !Object.keys(digest).length) return;
+  el.innerHTML = Object.entries(digest).map(([node, signals]) => `
+    <div class="risk-card">
+      <div class="risk-header">${node.toUpperCase()} BROADCAST</div>
+      <div style="font-family:'JetBrains Mono';font-size:0.68rem;color:var(--text);margin-top:4px;word-break:break-all;">
+        ${JSON.stringify(signals, null, 1).replace(/[{}"]/g, '')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderPhysics(phys) {
+  const el = document.getElementById('physicsDetails');
+  if (!phys) return;
+  el.innerHTML = Object.entries(phys).map(([node, p]) => `
+    <div class="risk-card" style="margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;">
+        <span style="font-weight:700;font-size:0.75rem;">${node.toUpperCase()}</span>
+        <span class="mode-tag mode-${p.inference_mode}">${p.inference_mode}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.68rem;margin-top:6px;font-family:'JetBrains Mono';">
+        <div>E_n Stress: <b>${p.epistemic_energy}</b></div>
+        <div>Learning η_s: <b>${p.eta_s}</b></div>
+        <div>Granularity dt: <b>${p.dt}</b></div>
+        <div>Snapshot: <b>#${p.snapshot}</b></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Counterfactual What-If Slider ─────────────────────────────────────────────
+async function updateWhatIf(val) {
+  document.getElementById('whatIfVal').textContent = `${val > 0 ? '+' : ''}${val} units`;
+  if (currentWeek === 0) return;
+  try {
+    const res = await fetch('/api/what_if', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ node: activeNode, delta_qty: parseInt(val) })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById('wi-wc').textContent = `₹${data.working_capital_impact_inr.toLocaleString('en-IN')}`;
+      document.getElementById('wi-hc').textContent = `₹${Math.round(data.holding_cost_impact_2w_inr).toLocaleString('en-IN')}`;
+      document.getElementById('wi-so').textContent = `${data.stockout_probability_pct}%`;
+      document.getElementById('wi-so').className = 'm-val ' + (data.stockout_probability_pct > 30 ? 'c-red' : 'c-green');
+      document.getElementById('wi-verdict').textContent = data.verdict;
+    }
+  } catch(e) { console.error(e); }
+}
+
+// ── Node & Tab Switching ──────────────────────────────────────────────────────
+function selectNode(node) {
+  activeNode = node;
+  document.querySelectorAll('.node-card').forEach(c => c.classList.remove('active'));
+  document.getElementById(`card-${node}`).classList.add('active');
+  setChatRole(node);
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', ['alerts', 'chat', 'bus', 'physics'][i] === name);
+  });
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById(`pane-${name}`).classList.add('active');
+}
+
+function setChatRole(role) {
+  chatRole = role;
+  document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(`rbtn-${role}`);
+  if (btn) btn.classList.add('active');
+  const labels = {
+    store: 'Store Operations Manager',
+    central_warehouse: 'Central Warehouse Manager',
+    mill: 'Fabric Mill Manager',
+    procurement: 'Procurement & Costing Manager'
+  };
+  document.getElementById('chatBotLabel').textContent = labels[role] || role;
+}
+
+// ── Chat Interaction ──────────────────────────────────────────────────────────
+async function sendChat() {
+  const inp = document.getElementById('chatInput');
+  const msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = '';
+
+  const box = document.getElementById('chatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'chat-bubble user';
+  userDiv.innerHTML = `<div class="chat-role-label">You (${chatRole.toUpperCase()})</div>${msg}`;
+  box.appendChild(userDiv);
+
+  const botDiv = document.createElement('div');
+  botDiv.className = 'chat-bubble bot';
+  botDiv.innerHTML = `<div class="chat-role-label">${document.getElementById('chatBotLabel').textContent}</div>Thinking...`;
+  box.appendChild(botDiv);
+  box.scrollTop = box.scrollHeight;
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ node: chatRole, message: msg })
+    });
+    const data = await res.json();
+    botDiv.innerHTML = `<div class="chat-role-label">${document.getElementById('chatBotLabel').textContent} [${data.mode}]</div>${data.response.replace(/\n/g, '<br>')}`;
+  } catch(e) {
+    botDiv.innerHTML = `<div class="chat-role-label">Error</div>Failed to contact copilot.`;
+  }
+  box.scrollTop = box.scrollHeight;
+}
+</script>
+</body>
+</html>
